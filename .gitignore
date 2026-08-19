@@ -1,0 +1,20 @@
+# Office lock files
+~$*
+
+# Virtualenv
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local secrets
+.env
+
+# Runtime artifacts
+*.log
+*.db
+
+# Personal Claude Code settings
+.claude/settings.local.json

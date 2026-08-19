@@ -1,0 +1,81 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "PowerShell",
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+
+      "Bash(aws lambda invoke --function-name care360-*)",
+      "Bash(aws lambda invoke --function-name care360-dev-*)",
+
+      "Bash(Get-ChildItem -Path \"f:\\\\Internship\\\\codebase\\\\Care360\\\\backend\\\\care360\\\\src\\\\main\\\\java\\\\com\\\\alkem\\\\care360\\\\\" -Recurse -Filter \"*.java\" | Select-Object -ExpandProperty Name | Sort-Object | head -30)",
+      "Bash(xargs grep -l \"message_log\\\\|template_message_log\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(tee /tmp/tsc.out)",
+
+      "Bash(python -m venv *)",
+      "Bash(python -m app.*)",
+      "Bash(python -m pip *)",
+      "Bash(pip install *)",
+      "Bash(pip freeze*)",
+      "Bash(./venv/*)",
+      "Bash(venv/Scripts/*)",
+      "Bash(venv/bin/*)",
+      "Bash(uvicorn *)",
+      "Bash(python -m uvicorn *)",
+      "Bash(curl *)",
+      "PowerShell(python *)",
+      "PowerShell(pip *)",
+      "PowerShell(./venv/*)",
+      "PowerShell(venv/Scripts/*)",
+      "PowerShell(uvicorn *)"
+    ],
+    "deny": [
+      "Bash(aws lambda invoke --function-name saarthi*)",
+      "Bash(aws lambda invoke --function-name arn:aws:lambda:ap-south-1:969712886882:function:saarthi*)",
+      "Bash(aws lambda update-function-code --function-name saarthi*)",
+      "Bash(aws lambda update-function-configuration --function-name saarthi*)",
+      "Bash(aws lambda delete-function --function-name saarthi*)",
+      "Bash(aws lambda add-permission --function-name saarthi*)",
+
+      "Bash(aws dynamodb put-item --table-name saarthi*)",
+      "Bash(aws dynamodb update-item --table-name saarthi*)",
+      "Bash(aws dynamodb delete-item --table-name saarthi*)",
+      "Bash(aws dynamodb batch-write-item *)",
+      "Bash(aws dynamodb delete-table --table-name saarthi*)",
+      "Bash(aws dynamodb update-table --table-name saarthi*)",
+      "Bash(aws dynamodb update-time-to-live --table-name saarthi*)",
+
+      "Bash(aws s3 rm s3://saarthi*)",
+      "Bash(aws s3 mv s3://saarthi*)",
+      "Bash(aws s3 sync * s3://saarthi*)",
+      "Bash(aws s3api delete-object*)",
+      "Bash(aws s3api put-bucket*)",
+      "Bash(aws s3api delete-bucket*)",
+
+      "Bash(aws scheduler create-schedule *)",
+      "Bash(aws scheduler update-schedule *)",
+      "Bash(aws scheduler delete-schedule *)",
+
+      "Bash(aws rds delete-db-instance *)",
+      "Bash(aws rds modify-db-instance *)",
+      "Bash(aws rds reboot-db-instance *)",
+      "Bash(aws rds restore-db-instance*)",
+
+      "Bash(aws secretsmanager get-secret-value --secret-id saarthi*)",
+      "Bash(aws secretsmanager put-secret-value *)",
+      "Bash(aws secretsmanager delete-secret *)",
+
+      "Bash(aws appconfig start-deployment *)",
+      "Bash(aws appconfig create-hosted-configuration-version *)",
+      "Bash(aws events put-rule *)",
+      "Bash(aws events delete-rule *)",
+      "Bash(aws iam *)"
+    ]
+  }
+}

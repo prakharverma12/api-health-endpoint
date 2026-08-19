@@ -1,0 +1,679 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sentinel — API Health Dashboard</title>
+<style>
+  :root {
+    --page:            #0d0d0d;
+    --surface-1:       #1a1a19;
+    --text-primary:    #ffffff;
+    --text-secondary:  #c3c2b7;
+    --text-muted:      #898781;
+    --gridline:        #2c2c2a;
+    --baseline-ink:    #383835;
+    --border:          rgba(255,255,255,0.10);
+    --series-1:        #3987e5;
+
+    /* status colors are fixed — never themed — same hex in light and dark */
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+  }
+
+  :root[data-theme="light"] {
+    --page:            #f9f9f7;
+    --surface-1:       #fcfcfb;
+    --text-primary:    #0b0b0b;
+    --text-secondary:  #52514e;
+    --text-muted:      #898781;
+    --gridline:        #e1e0d9;
+    --baseline-ink:    #c3c2b7;
+    --border:          rgba(11,11,11,0.10);
+    --series-1:        #2a78d6;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 2rem;
+    background: var(--page);
+    color: var(--text-primary);
+    font-variant-numeric: proportional-nums;
+  }
+  h1 { font-size: 1.35rem; margin: 0; }
+  h2 { font-size: 1.0rem; margin: 0 0 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  a { color: var(--series-1); }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+  .header-right { display: flex; align-items: center; gap: 1rem; }
+  .live-indicator { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); }
+  .theme-toggle {
+    font-size: 0.8rem; padding: 0.4rem 0.7rem; border-radius: 6px;
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-primary); cursor: pointer;
+  }
+  .theme-toggle:hover { border-color: var(--series-1); }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--status-good); }
+  .live-dot.pulsing { animation: pulse 1.6s ease-in-out infinite; }
+  .live-dot.down { background: var(--text-muted); animation: none; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(12,163,12,0.5); }
+    50% { box-shadow: 0 0 0 5px rgba(12,163,12,0); }
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+  }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-tile { display: flex; flex-direction: column; gap: 0.3rem; }
+  .stat-tile .value { font-size: 1.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat-tile .label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-tile .value.good { color: var(--status-good); }
+  .stat-tile .value.warning { color: var(--status-warning); }
+  .stat-tile .value.critical { color: var(--status-critical); }
+
+  .grid-2col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem; align-items: start; }
+  @media (max-width: 900px) { .grid-2col { grid-template-columns: 1fr; } }
+
+  section { margin-bottom: 1.5rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--gridline); }
+  th { color: var(--text-muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  td { font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+  .scroll-body { max-height: 320px; overflow-y: auto; }
+
+  .inline { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  input {
+    padding: 0.45rem 0.6rem; background: var(--page); border: 1px solid var(--border);
+    color: var(--text-primary); border-radius: 6px; font-size: 0.85rem;
+  }
+  input[name="name"] { width: 140px; }
+  input[name="url"] { flex: 1; }
+  button {
+    padding: 0.45rem 0.9rem; cursor: pointer; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); font-size: 0.85rem;
+  }
+  button:hover { border-color: var(--series-1); }
+  button.approve:hover { border-color: var(--status-good); }
+  button.deprecate:hover { border-color: var(--status-critical); }
+
+  .badge { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500; }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .badge.good { color: var(--status-good); }
+  .badge.good .dot { background: var(--status-good); }
+  .badge.warning { color: var(--status-warning); }
+  .badge.warning .dot { background: var(--status-warning); }
+  .badge.critical { color: var(--status-critical); }
+  .badge.critical .dot { background: var(--status-critical); }
+  .badge.pending { color: var(--text-muted); }
+  .badge.pending .dot { background: var(--text-muted); }
+
+  tr.alert-row { background: rgba(250, 178, 25, 0.08); }
+
+  #alert-banner {
+    display: none; position: sticky; top: 0; z-index: 10;
+    padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 8px;
+    font-weight: 600; font-size: 0.9rem; border: 1px solid transparent;
+  }
+  #alert-banner.warning { background: rgba(250, 178, 25, 0.12); color: var(--status-warning); border-color: var(--status-warning); }
+  #alert-banner.critical { background: rgba(208, 59, 59, 0.14); color: var(--status-critical); border-color: var(--status-critical); }
+
+  #alerts-panel { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+  #alerts-panel li { display: flex; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--gridline); font-size: 0.85rem; }
+  #alerts-panel li:last-child { border-bottom: none; }
+  #alerts-panel .time { color: var(--text-muted); flex: none; font-variant-numeric: tabular-nums; }
+  #alerts-panel li.warning { color: var(--status-warning); }
+  #alerts-panel li.critical { color: var(--status-critical); }
+  #alerts-panel .empty { color: var(--text-muted); font-style: italic; }
+
+  #charts { display: flex; flex-wrap: wrap; gap: 1rem; }
+  .chart-box { flex: 1 1 260px; min-width: 240px; position: relative; }
+  .chart-box h3 { margin: 0 0 0.5rem; font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); }
+  .chart-box svg { width: 100%; height: 112px; display: block; cursor: crosshair; }
+  .legend-note { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+  .legend-note .swatch-line { display: inline-block; width: 14px; border-top: 2px dashed var(--baseline-ink); vertical-align: middle; margin-right: 0.3rem; }
+
+  #chart-tooltip {
+    position: fixed; display: none; pointer-events: none; z-index: 20;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.4rem 0.6rem; font-size: 0.78rem; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  #chart-tooltip .val { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+  #chart-tooltip .sub { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Sentinel — Live Endpoint Health</h1>
+    <div class="header-right">
+      <div class="live-indicator"><span id="live-dot" class="live-dot pulsing"></span><span id="live-text">Connecting…</span></div>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light/dark mode">🌙 Dark</button>
+    </div>
+  </div>
+
+  <div id="alert-banner"></div>
+
+  <section class="card demo-controls">
+    <h2>Demo controls</h2>
+    <p class="legend-note">Register self-hosted dummy endpoints, let each build a baseline (~1 min), then trigger a real anomaly and watch the detector catch it live — alert, chart, and audit log all fire through the actual running system.</p>
+    <div class="inline">
+      <button id="register-demo-btn" type="button">Register spike demo</button>
+      <button id="toggle-slow-btn" type="button">🔥 Trigger latency spike</button>
+    </div>
+    <div class="inline">
+      <button id="register-drift-btn" type="button">Register drift demo</button>
+      <button id="start-drift-btn" type="button">📈 Start slow climb</button>
+      <button id="reset-drift-btn" type="button">↩ Reset drift</button>
+    </div>
+  </section>
+
+  <div class="stat-row">
+    <div class="card stat-tile"><div class="value" id="stat-monitored">0</div><div class="label">Endpoints monitored</div></div>
+    <div class="card stat-tile"><div class="value good" id="stat-uptime">—</div><div class="label">Uptime (recent checks)</div></div>
+    <div class="card stat-tile"><div class="value" id="stat-latency">—</div><div class="label">Avg latency</div></div>
+    <div class="card stat-tile"><div class="value" id="stat-alerts">0</div><div class="label">Alerts (last 5 min)</div></div>
+  </div>
+
+  <div class="grid-2col">
+    <div class="card">
+      <h2>Registry</h2>
+      <form id="register-form" class="inline">
+        <input name="name" placeholder="name" required>
+        <input name="url" placeholder="https://..." required>
+        <button type="submit">Register</button>
+      </form>
+      <table id="registry-table">
+        <thead><tr><th>Name</th><th>URL</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Alerts</h2>
+      <ul id="alerts-panel"><li class="empty">No alerts yet — all quiet.</li></ul>
+    </div>
+  </div>
+
+  <section class="card">
+    <h2>Live status</h2>
+    <div class="scroll-body">
+      <table id="status-table">
+        <thead><tr><th>Endpoint</th><th>Status</th><th>Latency</th><th>Baseline</th><th>Attempts</th><th>Time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Latency trend</h2>
+    <div class="legend-note"><span class="swatch-line"></span>shaded band = all-time baseline range (mean ± stdev) · red dot = drift or failure</div>
+    <div id="charts"></div>
+  </section>
+
+  <section class="card">
+    <h2>Audit log</h2>
+    <div class="scroll-body">
+      <table id="audit-table">
+        <thead><tr><th>Time</th><th>Actor</th><th>Endpoint</th><th>Action</th><th>Status</th><th>Latency</th><th>Detail</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div id="chart-tooltip"></div>
+
+<script>
+// ---------------- theme ----------------
+
+const themeToggle = document.getElementById('theme-toggle');
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  themeToggle.textContent = theme === 'light' ? '☀️ Light' : '🌙 Dark';
+  localStorage.setItem('sentinel-theme', theme);
+}
+
+applyTheme(localStorage.getItem('sentinel-theme') || 'dark');
+
+themeToggle.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+});
+
+// ---------------- registry ----------------
+
+function statusBadge(status) {
+  const cls = status === 'approved' ? 'good' : status === 'deprecated' ? 'critical' : 'pending';
+  const label = status === 'approved' ? 'Approved' : status === 'deprecated' ? 'Deprecated' : 'Pending';
+  return `<span class="badge ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+async function refreshRegistry() {
+  const res = await fetch('/endpoints');
+  const rows = await res.json();
+  document.getElementById('stat-monitored').textContent = rows.filter(r => r.status === 'approved').length;
+  const tbody = document.querySelector('#registry-table tbody');
+  tbody.innerHTML = '';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const nameCell = document.createElement('td');
+    nameCell.textContent = r.name;
+    const urlCell = document.createElement('td');
+    urlCell.textContent = r.url;
+    urlCell.style.color = 'var(--text-muted)';
+    urlCell.style.fontSize = '0.8rem';
+    const statusCell = document.createElement('td');
+    statusCell.innerHTML = statusBadge(r.status);
+    const actionsCell = document.createElement('td');
+    actionsCell.innerHTML = `
+      <button class="approve" data-action="approve" data-id="${r.id}">Approve</button>
+      <button class="deprecate" data-action="deprecate" data-id="${r.id}">Deprecate</button>`;
+    tr.append(nameCell, urlCell, statusCell, actionsCell);
+    tbody.appendChild(tr);
+  }
+}
+
+document.querySelector('#registry-table').addEventListener('click', async (e) => {
+  const action = e.target.dataset.action;
+  const id = e.target.dataset.id;
+  if (!action) return;
+  await fetch(`/endpoints/${id}/${action}`, { method: 'POST' });
+  refreshRegistry();
+});
+
+document.querySelector('#register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  await fetch('/endpoints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: form.get('name'), url: form.get('url') }),
+  });
+  e.target.reset();
+  refreshRegistry();
+});
+
+// ---------------- demo controls ----------------
+
+document.getElementById('register-demo-btn').addEventListener('click', async () => {
+  await fetch('/endpoints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Demo (self)', url: `${location.origin}/dummy/health` }),
+  });
+  refreshRegistry();
+});
+
+const toggleSlowBtn = document.getElementById('toggle-slow-btn');
+toggleSlowBtn.addEventListener('click', async () => {
+  const res = await fetch('/dummy/toggle', { method: 'POST' });
+  const data = await res.json();
+  toggleSlowBtn.textContent = data.slow ? '✅ Spike active — click to restore' : '🔥 Trigger latency spike';
+});
+
+document.getElementById('register-drift-btn').addEventListener('click', async () => {
+  await fetch('/endpoints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Drift Demo (self)', url: `${location.origin}/dummy/drift` }),
+  });
+  refreshRegistry();
+});
+
+const startDriftBtn = document.getElementById('start-drift-btn');
+startDriftBtn.addEventListener('click', async () => {
+  await fetch('/dummy/drift/start', { method: 'POST' });
+  startDriftBtn.textContent = '📈 Climbing…';
+});
+
+document.getElementById('reset-drift-btn').addEventListener('click', async () => {
+  await fetch('/dummy/drift/reset', { method: 'POST' });
+  startDriftBtn.textContent = '📈 Start slow climb';
+});
+
+// ---------------- live status, banner, alerts feed ----------------
+
+const statusBody = document.querySelector('#status-table tbody');
+const banner = document.getElementById('alert-banner');
+const alertsPanel = document.getElementById('alerts-panel');
+let bannerTimeout = null;
+let recentAlerts = []; // {severity, message, timestamp}
+
+function showBanner(alert) {
+  banner.textContent = `${alert.severity.toUpperCase()}: ${alert.message}`;
+  banner.className = alert.severity;
+  banner.style.display = 'block';
+  clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(() => { banner.style.display = 'none'; }, 8000);
+}
+
+function renderAlertsPanel() {
+  alertsPanel.innerHTML = '';
+  if (recentAlerts.length === 0) {
+    alertsPanel.innerHTML = '<li class="empty">No alerts yet — all quiet.</li>';
+    return;
+  }
+  for (const alert of recentAlerts.slice(0, 20)) {
+    const li = document.createElement('li');
+    li.className = alert.severity;
+    const time = document.createElement('span');
+    time.className = 'time';
+    time.textContent = new Date(alert.timestamp).toLocaleTimeString();
+    const msg = document.createElement('span');
+    msg.textContent = alert.message;
+    li.append(time, msg);
+    alertsPanel.appendChild(li);
+  }
+}
+
+function severityFor(r) {
+  if (r.ok) return 'good';
+  const severities = (r.alerts || []).map(a => a.severity);
+  if (severities.includes('critical')) return 'critical';
+  if (severities.length) return 'warning';
+  return 'critical';
+}
+
+function statusLabel(r) {
+  if (r.status_code == null) return 'ERR';
+  return String(r.status_code);
+}
+
+// ---------------- stat tiles ----------------
+
+let statTotal = 0, statOk = 0;
+const latencyWindow = [];
+const MAX_LATENCY_WINDOW = 50;
+
+function updateStats(r) {
+  statTotal += 1;
+  if (r.ok) statOk += 1;
+  latencyWindow.push(r.latency_ms);
+  while (latencyWindow.length > MAX_LATENCY_WINDOW) latencyWindow.shift();
+
+  document.getElementById('stat-uptime').textContent = statTotal ? Math.round((statOk / statTotal) * 100) + '%' : '—';
+  const uptimeEl = document.getElementById('stat-uptime');
+  uptimeEl.className = 'value ' + (statOk / statTotal >= 0.99 ? 'good' : statOk / statTotal >= 0.9 ? 'warning' : 'critical');
+
+  const avg = latencyWindow.reduce((a, b) => a + b, 0) / latencyWindow.length;
+  document.getElementById('stat-latency').textContent = Math.round(avg) + 'ms';
+
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  const recentCount = recentAlerts.filter(a => new Date(a.timestamp).getTime() >= fiveMinAgo).length;
+  const alertsEl = document.getElementById('stat-alerts');
+  alertsEl.textContent = recentCount;
+  alertsEl.className = 'value ' + (recentCount === 0 ? '' : recentCount < 3 ? 'warning' : 'critical');
+}
+
+// ---------------- latency charts ----------------
+
+const historyByEndpoint = {};
+const MAX_POINTS = 30;
+const W = 300, H = 112;
+const PAD_LEFT = 36, PAD_RIGHT = 8, PAD_TOP = 10, PAD_BOTTOM = 18;
+const PLOT_W = W - PAD_LEFT - PAD_RIGHT;
+const PLOT_H = H - PAD_TOP - PAD_BOTTOM;
+const tooltip = document.getElementById('chart-tooltip');
+
+const chartBoxes = new Map();
+
+function ensureChart(endpoint) {
+  let box = chartBoxes.get(endpoint);
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'chart-box';
+    const title = document.createElement('h3');
+    title.textContent = endpoint;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    box.append(title, svg);
+    document.getElementById('charts').appendChild(box);
+
+    svg.addEventListener('mousemove', (e) => onChartHover(e, endpoint, svg));
+    svg.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+    chartBoxes.set(endpoint, box);
+  }
+  return box.querySelector('svg');
+}
+
+// domainMax is the y-axis scale ceiling (0 is always the floor — latency can't go negative)
+function domainMaxFor(points) {
+  const latencies = points.map(p => p.latency_ms);
+  const last = [...points].reverse().find(p => p.baseline_ms != null);
+  const bandTop = last ? last.baseline_ms + (last.baseline_stdev_ms || 0) : 0;
+  return Math.max(...latencies, bandTop, 1) * 1.15;
+}
+
+function toXY(points, domainMax, v, i) {
+  const stepX = PLOT_W / Math.max(points.length - 1, 1);
+  const x = PAD_LEFT + i * stepX;
+  const y = PAD_TOP + PLOT_H - (v / domainMax) * PLOT_H;
+  return [x, y];
+}
+
+function renderChart(endpoint) {
+  const points = historyByEndpoint[endpoint];
+  const svg = ensureChart(endpoint);
+  const domainMax = domainMaxFor(points);
+
+  const linePoints = points.map((p, i) => toXY(points, domainMax, p.latency_ms, i).join(',')).join(' ');
+
+  let band = '';
+  let baselineLine = '';
+  const last = [...points].reverse().find(p => p.baseline_ms != null);
+  if (last != null) {
+    const stdev = last.baseline_stdev_ms || 0;
+    const [, yMean] = toXY(points, domainMax, last.baseline_ms, 0);
+    const [, yTop] = toXY(points, domainMax, last.baseline_ms + stdev, 0);
+    const [, yBottom] = toXY(points, domainMax, Math.max(0, last.baseline_ms - stdev), 0);
+    band = `<rect x="${PAD_LEFT}" y="${yTop.toFixed(1)}" width="${PLOT_W}" height="${(yBottom - yTop).toFixed(1)}" fill="var(--baseline-ink)" opacity="0.25"/>`;
+    baselineLine = `<line x1="${PAD_LEFT}" y1="${yMean.toFixed(1)}" x2="${W - PAD_RIGHT}" y2="${yMean.toFixed(1)}" stroke="var(--baseline-ink)" stroke-dasharray="4,3" stroke-width="1"/>`;
+  }
+
+  const dots = points.map((p, i) => {
+    const [x, y] = toXY(points, domainMax, p.latency_ms, i);
+    const color = (p.hasAlert || !p.ok) ? 'var(--status-critical)' : 'var(--status-good)';
+    const r = p.hasAlert ? 3.5 : 2;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${color}"/>`;
+  }).join('');
+
+  const yAxisLine = `<line x1="${PAD_LEFT}" y1="${PAD_TOP}" x2="${PAD_LEFT}" y2="${PAD_TOP + PLOT_H}" stroke="var(--gridline)" stroke-width="1"/>`;
+  const xAxisLine = `<line x1="${PAD_LEFT}" y1="${PAD_TOP + PLOT_H}" x2="${W - PAD_RIGHT}" y2="${PAD_TOP + PLOT_H}" stroke="var(--gridline)" stroke-width="1"/>`;
+  const yMaxLabel = `<text x="${PAD_LEFT - 4}" y="${PAD_TOP + 3}" text-anchor="end" font-size="7" fill="var(--text-muted)">${Math.round(domainMax)}ms</text>`;
+  const yZeroLabel = `<text x="${PAD_LEFT - 4}" y="${PAD_TOP + PLOT_H}" text-anchor="end" font-size="7" fill="var(--text-muted)">0</text>`;
+  const xStartLabel = `<text x="${PAD_LEFT}" y="${H - 4}" text-anchor="start" font-size="7" fill="var(--text-muted)">${points[0].time}</text>`;
+  const xEndLabel = `<text x="${W - PAD_RIGHT}" y="${H - 4}" text-anchor="end" font-size="7" fill="var(--text-muted)">${points[points.length - 1].time}</text>`;
+
+  svg.innerHTML = `
+    ${band}
+    ${yAxisLine}
+    ${xAxisLine}
+    ${baselineLine}
+    <polyline points="${linePoints}" fill="none" stroke="var(--series-1)" stroke-width="1.5"/>
+    ${dots}
+    ${yMaxLabel}
+    ${yZeroLabel}
+    ${xStartLabel}
+    ${xEndLabel}
+  `;
+}
+
+function onChartHover(e, endpoint, svg) {
+  const points = historyByEndpoint[endpoint];
+  if (!points || points.length === 0) return;
+  const domainMax = domainMaxFor(points);
+  const rect = svg.getBoundingClientRect();
+  const relX = ((e.clientX - rect.left) / rect.width) * W;
+  const stepX = PLOT_W / Math.max(points.length - 1, 1);
+  let idx = Math.round((relX - PAD_LEFT) / stepX);
+  idx = Math.max(0, Math.min(points.length - 1, idx));
+  const p = points[idx];
+
+  const baselineText = p.baseline_ms != null
+    ? `baseline ${p.baseline_ms.toFixed(0)}ms${p.baseline_stdev_ms != null ? ' ± ' + p.baseline_stdev_ms.toFixed(0) + 'ms' : ''}`
+    : null;
+  tooltip.textContent = '';
+  const valDiv = document.createElement('div');
+  valDiv.className = 'val';
+  valDiv.textContent = p.latency_ms.toFixed(0) + 'ms';
+  const subDiv = document.createElement('div');
+  subDiv.className = 'sub';
+  subDiv.textContent = `${p.time} · ${endpoint}`;
+  tooltip.append(valDiv, subDiv);
+  if (baselineText) {
+    const baselineDiv = document.createElement('div');
+    baselineDiv.className = 'sub';
+    baselineDiv.textContent = baselineText;
+    tooltip.append(baselineDiv);
+  }
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top = (e.clientY - 10) + 'px';
+}
+
+// ---------------- websocket ----------------
+
+const liveDot = document.getElementById('live-dot');
+const liveText = document.getElementById('live-text');
+
+function buildStatusRow(r, hasAlert, severity) {
+  const tr = document.createElement('tr');
+  if (hasAlert) tr.classList.add('alert-row');
+  const endpointCell = document.createElement('td');
+  endpointCell.textContent = r.endpoint;
+  const statusCell = document.createElement('td');
+  const badge = document.createElement('span');
+  badge.className = `badge ${severity}`;
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  badge.append(dot, document.createTextNode(statusLabel(r)));
+  statusCell.appendChild(badge);
+  const latencyCell = document.createElement('td');
+  latencyCell.textContent = r.latency_ms.toFixed(0) + 'ms';
+  const baselineCell = document.createElement('td');
+  baselineCell.textContent = r.baseline_ms != null
+    ? r.baseline_ms.toFixed(0) + 'ms' + (r.baseline_stdev_ms != null ? ' ± ' + r.baseline_stdev_ms.toFixed(0) + 'ms' : '')
+    : '—';
+  const attemptsCell = document.createElement('td');
+  attemptsCell.textContent = r.attempts;
+  const timeCell = document.createElement('td');
+  timeCell.textContent = new Date(r.timestamp).toLocaleTimeString();
+  tr.append(endpointCell, statusCell, latencyCell, baselineCell, attemptsCell, timeCell);
+  return tr;
+}
+
+function pushChartPoint(r, hasAlert) {
+  if (!historyByEndpoint[r.endpoint]) historyByEndpoint[r.endpoint] = [];
+  const arr = historyByEndpoint[r.endpoint];
+  arr.push({
+    latency_ms: r.latency_ms, baseline_ms: r.baseline_ms, baseline_stdev_ms: r.baseline_stdev_ms, ok: r.ok, hasAlert,
+    time: new Date(r.timestamp).toLocaleTimeString(),
+  });
+  while (arr.length > MAX_POINTS) arr.shift();
+}
+
+async function hydrateHistory() {
+  const res = await fetch('/history?limit=200');
+  if (!res.ok) return;
+  const rows = await res.json();
+  const touchedEndpoints = new Set();
+  const recentRows = rows.slice(-25);
+  for (const r of rows) {
+    const hasAlert = !r.ok;
+    pushChartPoint(r, hasAlert);
+    touchedEndpoints.add(r.endpoint);
+  }
+  for (const r of recentRows) {
+    const hasAlert = !r.ok;
+    statusBody.appendChild(buildStatusRow(r, hasAlert, severityFor(r)));
+  }
+  while (statusBody.rows.length > 25) statusBody.deleteRow(0);
+  for (const endpoint of touchedEndpoints) renderChart(endpoint);
+  if (rows.length) updateStats(rows[rows.length - 1]);
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws/status`);
+
+  ws.onopen = () => {
+    liveDot.className = 'live-dot pulsing';
+    liveText.textContent = 'Live';
+  };
+  ws.onclose = () => {
+    liveDot.className = 'live-dot down';
+    liveText.textContent = 'Disconnected — retrying…';
+    setTimeout(connect, 3000);
+  };
+
+  ws.onmessage = (event) => {
+    const r = JSON.parse(event.data);
+    const hasAlert = r.alerts && r.alerts.length > 0;
+    const severity = severityFor(r);
+
+    statusBody.prepend(buildStatusRow(r, hasAlert, severity));
+    while (statusBody.rows.length > 25) statusBody.deleteRow(-1);
+
+    pushChartPoint(r, hasAlert);
+    renderChart(r.endpoint);
+
+    updateStats(r);
+
+    if (hasAlert) {
+      for (const alert of r.alerts) {
+        showBanner(alert);
+        recentAlerts.unshift({ ...alert, timestamp: r.timestamp });
+        recentAlerts = recentAlerts.slice(0, 50);
+      }
+      renderAlertsPanel();
+      updateStats(r); // recompute alert count after recentAlerts changes
+    }
+  };
+}
+
+// ---------------- audit log ----------------
+
+async function refreshAuditLog() {
+  const res = await fetch('/access-log?limit=25');
+  if (!res.ok) return;
+  const rows = await res.json();
+  const tbody = document.querySelector('#audit-table tbody');
+  tbody.innerHTML = '';
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    if (row.action === 'alert') tr.classList.add('alert-row');
+    const time = new Date(row.created_at).toLocaleTimeString();
+    const cells = [
+      time, row.actor, row.endpoint, row.action,
+      row.status_code ?? '—',
+      row.latency_ms != null ? row.latency_ms.toFixed(0) + 'ms' : '—',
+      row.detail ?? '—',
+    ];
+    for (const value of cells) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+setInterval(refreshAuditLog, 4000);
+
+refreshRegistry();
+refreshAuditLog();
+hydrateHistory();
+connect();
+</script>
+</body>
+</html>
